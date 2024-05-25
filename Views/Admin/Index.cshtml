@@ -1,0 +1,147 @@
+﻿@{
+    ViewBag.Title = "Admin Panel";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<div>
+    <h3>Sual və Cavab əlavə et</h3>
+    <form id="addQuestionForm">
+        <div>
+            <label>Sual:</label>
+            <input type="text" id="questionText" name="questionText" required />
+        </div>
+        <div>
+            <label>Aktiv:</label>
+            <input type="checkbox" id="isActive" name="isActive" />
+        </div>
+        <div>
+            <label>Cavablar:</label>
+            @for (int i = 0; i < 5; i++)
+            {
+                <div>
+                    <input type="text" name="answers[@i].AnswerText" required />
+                    <input type="radio" name="isCorrect" value="@i" required />
+                </div>
+            }
+        </div>
+        <button type="submit">Yadda saxla</button>
+    </form>
+</div>
+
+<div>
+    <h3>Sual Siyahısı</h3>
+    <table id="questionsTable" class="display" style="width:100%">
+        <thead>
+            <tr>
+                <th>Sual</th>
+                <th>Aktiv/Passiv</th>
+                <th>Sualı yaradan istifadəçi</th>
+                <th>Sualın yaradılma zamanı</th>
+                <th>Əməliyyatlar</th>
+            </tr>
+        </thead>
+        <tbody>
+        </tbody>
+    </table>
+</div>
+
+@section scripts {
+    <script>
+        $(document).ready(function () {
+            // Initialize DataTable
+            var table = $('#questionsTable').DataTable({
+                serverSide: true,
+                processing: true,
+                paging: true,
+                pageLength: 10, // Default page length
+                ajax: {
+                    url: '@Url.Action("GetQuestions", "Admin")',
+                    data: function (d) {
+                        d.index = (d.start / d.length) + 1; // Calculate page index
+                        d.size = d.length; // Page size
+                        d.searchValue = d.search.value; // Add search value
+                    },
+                    dataSrc: function (json) {
+                        json.recordsTotal = json.fullDataCount;
+                        json.recordsFiltered = json.fullDataCount;
+                        return json.questionDtos;
+                    }
+                },
+                columns: [
+                    { data: 'questionText', className: "centered-cell" },
+                    { data: 'isActive', className: "centered-cell" },
+                    { data: 'insertedBy', className: "centered-cell" },
+                    { data: 'insertedDate', className: "centered-cell" },
+                    {
+                        data: null,
+                        className: "centered-cell",
+                        defaultContent: '<button class="delete-question">Sil</button>'
+                    }
+                ]
+            });
+
+            // Add Question Form Submission
+            $("#addQuestionForm").on("submit", function (e) {
+                e.preventDefault();
+
+                if (!$("input[name='isCorrect']:checked").val()) {
+                    alert("Zəhmət olmasa düzgün cavabı seçin.");
+                    return false;
+                }
+
+                var formData = $(this).serializeArray();
+                var questionText = formData.find(f => f.name === "questionText").value;
+                var isActive = $("#isActive").is(":checked");
+                var answers = [];
+
+                for (var i = 0; i < 5; i++) {
+                    var answerText = formData.find(f => f.name === `answers[${i}].AnswerText`).value;
+                    var isCorrect = $("input[name='isCorrect']:checked").val() == i;
+                    answers.push({ AnswerText: answerText, IsCorrect: isCorrect });
+                }
+
+                $.ajax({
+                    url: '@Url.Action("AddQuestionAndAnswers", "Admin")',
+                    type: 'POST',
+                    data: JSON.stringify({ questionText: questionText, isActive: isActive, answers: answers }),
+                    contentType: 'application/json',
+                    success: function (response) {
+                        if (response.success) {
+                            alert("Sual və cavablar əlavə olundu.");
+                            table.ajax.reload();  // Reload DataTable
+                        } else {
+                            alert("Xəta baş verdi: " + (response.error || ''));
+                        }
+                    }
+                });
+            });
+
+           // Handle delete question button click
+    $('#questionsTable tbody').on('click', 'button.delete-question', function () {
+        var questionId = $(this).data('id'); // Get the question id from data attribute
+        if (confirm('Bu sualı silmək istədiyinizə əminsinizmi?')) {
+            $.ajax({
+                url: '@Url.Action("DeleteQuestion", "Admin")',
+                type: 'POST',
+                data: JSON.stringify({ id: questionId }),
+                contentType: 'application/json',
+                success: function (response) {
+                    if (response.success) {
+                        alert("Sual silindi.");
+                        table.ajax.reload();  // Reload DataTable
+                    } else {
+                        alert("Xəta baş verdi: " + (response.error || ''));
+                    }
+                }
+            });
+        }
+    });
+});
+    </script>
+}
+
+<style>
+    .centered-cell {
+        text-align: center;
+    }
+</style>
